@@ -82,6 +82,6 @@ The system SHALL implement all AQ-J web form prototypes using only static assets
 #### Scenario: Static assets only
 - **WHEN** the prototypes are built and deployed
 - **THEN** all functionality (including navigation between questions, progress indication, and answer retention within a session) SHALL work using only client-side code
-- **AND** no server-side APIs or databases SHALL be required for the basic MOC behavior.
+- **AND** no server-side APIs or databases SHALL be required for the basic demo behavior.
 
 
