@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>AQ-J ドロップダウン形式</title>
+    <link rel="stylesheet" href="./aqj.css" />
+  </head>
+  <body>
+    <div class="page">
+      <div class="app-shell">
+        <header>
+          <p class="status-pill">AQ-J モバイルMOC · Dropdown</p>
+          <h1>AQ 日本語版ドロップダウンフォーム</h1>
+          <p class="lead">
+            50問を 10 問ずつのセクションにまとめました。必要なブロックだけ開いて回答できます。
+          </p>
+        </header>
+
+        <section class="instructions-card">
+          <h2>回答のしかた</h2>
+          <div data-instructions></div>
+          <div class="info-card" aria-live="polite">
+            <strong>回答スケール</strong>
+            <ul class="instructions-list">
+              <li>1: あてはまる</li>
+              <li>2: どちらかといえば、あてはまる</li>
+              <li>3: どちらかといえば、あてはまらない</li>
+              <li>4: あてはまらない（ちがう）</li>
+            </ul>
+          </div>
+        </section>
+
+        <section aria-label="質問セクション" data-question-groups></section>
+
+        <section class="instructions-card completion-section" aria-live="polite">
+          <div class="status-banner error" data-status hidden></div>
+          <div class="summary-actions">
+            <button class="button primary" data-review>回答を確認</button>
+            <button class="button secondary" data-reset>すべてリセット</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" data-summary-modal aria-hidden="true" role="dialog" aria-label="回答サマリー">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2>回答サマリー</h2>
+          <button class="modal-close" type="button" data-close-summary aria-label="閉じる">×</button>
+        </div>
+        <div class="summary-card" data-summary-content></div>
+        <div class="summary-actions">
+          <button class="button secondary" data-copy-summary>サマリーをコピー</button>
+          <button class="button primary" data-close-summary>閉じる</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import {
+        AQJ_QUESTIONS,
+        createDropdownOptions,
+        createInstructionsList,
+        chunkQuestions,
+        getRangeLabel,
+        formatQuestionId,
+        createAnswerStore,
+        formatSummaryEntries
+      } from "./aqj.js";
+
+      const instructionsContainer = document.querySelector("[data-instructions]");
+      createInstructionsList(instructionsContainer);
+
+      const groupsContainer = document.querySelector("[data-question-groups]");
+      const groups = chunkQuestions(AQJ_QUESTIONS, 10);
+
+      const store = createAnswerStore();
+      const selectRefs = new Map();
+      const cardRefs = new Map();
+      const sectionRefs = new Map();
+
+      const statusBanner = document.querySelector("[data-status]");
+      const reviewButton = document.querySelector("[data-review]");
+      const resetButton = document.querySelector("[data-reset]");
+      const modal = document.querySelector("[data-summary-modal]");
+      const closeButtons = document.querySelectorAll("[data-close-summary]");
+      const summaryContent = document.querySelector("[data-summary-content]");
+      const copyButton = document.querySelector("[data-copy-summary]");
+
+      groups.forEach((group) => {
+        const details = document.createElement("details");
+        details.className = "question-group";
+        details.open = true;
+
+        const summary = document.createElement("summary");
+        summary.textContent = getRangeLabel(group);
+        details.appendChild(summary);
+
+        const sectionBody = document.createElement("div");
+        sectionBody.className = "question-group-content";
+
+        group.forEach((question) => {
+          const card = document.createElement("article");
+          card.className = "question-card";
+
+          const label = document.createElement("label");
+          label.className = "question-label";
+          label.setAttribute("for", formatQuestionId(question.id));
+          label.textContent = `Q${question.id}. ${question.text}`;
+
+          const selectWrapper = document.createElement("div");
+          selectWrapper.className = "select-wrapper";
+          const select = document.createElement("select");
+          select.className = "select-control";
+          select.id = formatQuestionId(question.id);
+          select.name = formatQuestionId(question.id);
+          select.setAttribute("aria-label", `質問${question.id}の回答を選択`);
+
+          createDropdownOptions(select);
+
+          selectWrapper.appendChild(select);
+          card.appendChild(label);
+          card.appendChild(selectWrapper);
+
+          const hint = document.createElement("p");
+          hint.className = "range-label";
+          hint.textContent = "タップして選択してください";
+          card.appendChild(hint);
+
+          select.addEventListener("change", (event) => {
+            const value = event.target.value || null;
+            if (value) {
+              card.classList.remove("invalid");
+            }
+            store.set(question.id, value);
+            hideStatus();
+          });
+
+          selectRefs.set(question.id, select);
+          cardRefs.set(question.id, card);
+          sectionRefs.set(question.id, details);
+
+          sectionBody.appendChild(card);
+        });
+
+        details.appendChild(sectionBody);
+        groupsContainer.appendChild(details);
+      });
+
+      function hideStatus() {
+        statusBanner.hidden = true;
+        statusBanner.textContent = "";
+        statusBanner.classList.remove("error", "success");
+      }
+
+      function showStatus(type, message) {
+        statusBanner.hidden = false;
+        statusBanner.classList.remove("error", "success");
+        statusBanner.classList.add(type);
+        statusBanner.textContent = message;
+      }
+
+      function openModal() {
+        modal.setAttribute("aria-hidden", "false");
+      }
+
+      function closeModal() {
+        modal.setAttribute("aria-hidden", "true");
+      }
+
+      function resetForm() {
+        store.clear();
+        selectRefs.forEach((select) => {
+          select.value = "";
+        });
+        cardRefs.forEach((card) => card.classList.remove("invalid"));
+        hideStatus();
+        closeModal();
+        showStatus("success", "回答をすべてリセットしました。");
+      }
+
+      function highlightMissing(questionIds) {
+        if (!questionIds.length) return;
+        questionIds.forEach((id, idx) => {
+          const card = cardRefs.get(id);
+          card.classList.add("invalid");
+          const section = sectionRefs.get(id);
+          section.open = true;
+          if (idx === 0) {
+            const select = selectRefs.get(id);
+            select.scrollIntoView({ behavior: "smooth", block: "center" });
+            setTimeout(() => select.focus({ preventScroll: true }), 250);
+          }
+        });
+      }
+
+      function renderSummary() {
+        const entries = formatSummaryEntries(store.toSummaryEntries());
+        const answeredCount = store.getAnsweredCount();
+        const table = document.createElement("table");
+        table.className = "summary-table";
+
+        const thead = document.createElement("thead");
+        thead.innerHTML = "<tr><th>番号</th><th>回答</th><th>質問文</th></tr>";
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        entries.forEach((entry) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>Q${entry.id}</td>
+            <td>${entry.label}</td>
+            <td>${entry.text}</td>
+          `;
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+
+        const plainText = document.createElement("textarea");
+        plainText.className = "summary-text-block";
+        plainText.readOnly = true;
+        plainText.value = store.toPlainText();
+
+        summaryContent.innerHTML = `
+          <p><strong>${answeredCount}/${AQJ_QUESTIONS.length}</strong> の回答を記録しました。</p>
+        `;
+        summaryContent.appendChild(table);
+        summaryContent.appendChild(plainText);
+      }
+
+      function reviewAnswers() {
+        const missing = store.getUnansweredQuestionIds();
+        if (missing.length) {
+          showStatus("error", `未回答が ${missing.length} 問あります。最初の未回答: Q${missing[0]}`);
+          highlightMissing(missing);
+          closeModal();
+          return;
+        }
+        renderSummary();
+        showStatus("success", "全50問の回答を記録しました。サマリーをご確認ください。");
+        openModal();
+      }
+
+      reviewButton.addEventListener("click", reviewAnswers);
+      resetButton.addEventListener("click", resetForm);
+      closeButtons.forEach((btn) => btn.addEventListener("click", closeModal));
+      copyButton.addEventListener("click", async () => {
+        const textarea = summaryContent.querySelector("textarea");
+        if (!textarea) return;
+        textarea.select();
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(textarea.value);
+          } else {
+            document.execCommand("copy");
+          }
+          showStatus("success", "サマリーをクリップボードにコピーしました。");
+        } catch (error) {
+          showStatus("error", "コピーに失敗しました。手動で選択してください。");
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeModal();
+        }
+      });
+    </script>
+  </body>
+</html>
+
