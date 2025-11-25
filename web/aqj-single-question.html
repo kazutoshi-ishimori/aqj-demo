@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>AQ-J 一問一回答形式</title>
+    <link rel="stylesheet" href="./aqj.css" />
+  </head>
+  <body>
+    <div class="page">
+      <div class="app-shell">
+        <header>
+          <p class="status-pill">AQ-J モバイルデモ · 1問ずつ</p>
+          <h1>AQ 日本語版 一問一回答フロー</h1>
+          <p class="lead">
+            50問を1ページに縦並びで表示し、スクロールするだけで前後の質問を見直せます。進捗バーと回答済みドットで現在の回答状況がわかります。
+          </p>
+          <div class="progress-indicator" role="status" aria-live="polite">
+            <span class="progress-text" data-progress-text>0 / 50</span>
+            <div class="progress-bar" aria-hidden="true">
+              <div class="progress-bar-fill" data-progress-bar></div>
+            </div>
+          </div>
+          <p class="range-label" data-progress-subtext>回答済 0 問 · 残り 50 問</p>
+        </header>
+
+        <div class="status-banner error" data-status hidden></div>
+
+        <section class="instructions-card">
+          <h2>回答のしかた</h2>
+          <div data-single-instructions></div>
+        </section>
+
+        <div class="answer-dot-bar" data-answer-dots></div>
+
+        <main class="question-stack" aria-label="AQ-J 質問リスト" data-question-list></main>
+
+        <div class="nav-buttons">
+          <button class="button primary" data-review>回答を確認</button>
+          <button class="button secondary" data-reset>リセット</button>
+        </div>
+
+        <section class="summary-card" data-summary hidden></section>
+      </div>
+    </div>
+
+    <script type="module">
+      import {
+        AQJ_QUESTIONS,
+        AQJ_SCALE,
+        createRadioOption,
+        formatQuestionId,
+        createAnswerStore,
+        summarizeAnswers,
+        createInstructionsList
+      } from "./aqj.js";
+
+      const allowIncompleteSummary = true;
+      const total = AQJ_QUESTIONS.length;
+      const store = createAnswerStore();
+
+      const statusBanner = document.querySelector("[data-status]");
+      const instructionsContainer = document.querySelector("[data-single-instructions]");
+      const questionList = document.querySelector("[data-question-list]");
+      const progressText = document.querySelector("[data-progress-text]");
+      const progressBar = document.querySelector("[data-progress-bar]");
+      const progressSubtext = document.querySelector("[data-progress-subtext]");
+      const dotContainer = document.querySelector("[data-answer-dots]");
+      const reviewButton = document.querySelector("[data-review]");
+      const resetButton = document.querySelector("[data-reset]");
+      const summaryCard = document.querySelector("[data-summary]");
+
+      createInstructionsList(instructionsContainer);
+
+      const cardRefs = new Map();
+
+      function renderQuestions() {
+        AQJ_QUESTIONS.forEach((question) => {
+          const card = document.createElement("article");
+          card.className = "question-card";
+          card.id = `question-card-${question.id}`;
+
+          const fieldset = document.createElement("fieldset");
+          const legend = document.createElement("legend");
+          legend.textContent = `Q${question.id}. ${question.text}`;
+          fieldset.appendChild(legend);
+
+          const choices = document.createElement("div");
+          choices.className = "choices";
+
+          AQJ_SCALE.forEach((option) => {
+            const optionNode = createRadioOption(option, formatQuestionId(question.id), store.get(question.id));
+            const input = optionNode.querySelector("input");
+            input.id = `${formatQuestionId(question.id)}-${option.value}`;
+            const desc = optionNode.querySelector(".choice-desc");
+            if (desc) {
+              const descId = `${formatQuestionId(question.id)}-${option.value}-desc`;
+              desc.id = descId;
+              input.setAttribute("aria-describedby", descId);
+            }
+            input.addEventListener("change", () => {
+              store.set(question.id, input.value);
+              card.classList.remove("invalid");
+              hideStatus();
+              summaryCard.hidden = true;
+              updateProgressMeta();
+            });
+            choices.appendChild(optionNode);
+          });
+
+          fieldset.appendChild(choices);
+          card.appendChild(fieldset);
+          questionList.appendChild(card);
+          cardRefs.set(question.id, card);
+        });
+      }
+
+      function updateProgressMeta() {
+        const answered = store.getAnsweredCount();
+        progressText.textContent = `${answered} / ${total}`;
+        progressSubtext.textContent = `回答済 ${answered} 問 · 未回答 ${total - answered} 問`;
+        const percent = (answered / total) * 100;
+        progressBar.style.width = `${percent}%`;
+
+        dotContainer.innerHTML = "";
+        AQJ_QUESTIONS.forEach((_, idx) => {
+          const dot = document.createElement("span");
+          dot.className = "answer-dot";
+          if (store.get(idx + 1)) {
+            dot.classList.add("answered");
+          }
+          dot.setAttribute("title", `Q${idx + 1} ${store.get(idx + 1) ? "回答済" : "未回答"}`);
+          dotContainer.appendChild(dot);
+        });
+      }
+
+      function showStatus(type, message) {
+        statusBanner.hidden = false;
+        statusBanner.classList.remove("error", "success", "warning");
+        statusBanner.classList.add(type);
+        statusBanner.textContent = message;
+      }
+
+      function hideStatus() {
+        statusBanner.hidden = true;
+        statusBanner.textContent = "";
+        statusBanner.classList.remove("error", "success", "warning");
+      }
+
+      function highlightMissing(questionIds, { scrollToFirst = false } = {}) {
+        if (!questionIds.length) return;
+        questionIds.forEach((id, index) => {
+          const card = cardRefs.get(id);
+          if (!card) return;
+          card.classList.add("invalid");
+          if (scrollToFirst && index === 0) {
+            card.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        });
+      }
+
+      function renderSummary(summaryInfo) {
+        summaryCard.hidden = false;
+        summaryCard.innerHTML = `
+          <h2>回答サマリー</h2>
+          <p>${summaryInfo.answeredCount}/${summaryInfo.total} の回答を記録しました。</p>
+        `;
+
+        if (summaryInfo.missingQuestionIds.length) {
+          const note = document.createElement("p");
+          note.className = "range-label";
+          note.textContent = `未回答 ${summaryInfo.missingQuestionIds.length} 問: ${summaryInfo.missingQuestionIds
+            .map((id) => `Q${id}`)
+            .join(", ")}`;
+          summaryCard.appendChild(note);
+        }
+
+        const table = document.createElement("table");
+        table.className = "summary-table";
+        table.innerHTML = "<thead><tr><th>番号</th><th>回答</th><th>質問文</th></tr></thead>";
+        const tbody = document.createElement("tbody");
+        summaryInfo.entries.forEach((entry) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>Q${entry.id}</td><td>${entry.label}</td><td>${entry.text}</td>`;
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        summaryCard.appendChild(table);
+
+        const textarea = document.createElement("textarea");
+        textarea.className = "summary-text-block";
+        textarea.readOnly = true;
+        textarea.value = summaryInfo.plainText;
+        summaryCard.appendChild(textarea);
+
+        const copyBtn = document.createElement("button");
+        copyBtn.className = "button secondary";
+        copyBtn.type = "button";
+        copyBtn.textContent = "サマリーをコピー";
+        copyBtn.addEventListener("click", async () => {
+          textarea.select();
+          try {
+            if (navigator.clipboard?.writeText) {
+              await navigator.clipboard.writeText(textarea.value);
+            } else {
+              document.execCommand("copy");
+            }
+            showStatus("success", "サマリーをコピーしました。");
+          } catch (error) {
+            showStatus("error", "コピーに失敗しました。手動で選択してください。");
+          }
+        });
+        summaryCard.appendChild(copyBtn);
+      }
+
+      function reviewAnswers() {
+        const summaryInfo = summarizeAnswers(store, { allowIncomplete: allowIncompleteSummary });
+        const missing = summaryInfo.missingQuestionIds;
+        if (missing.length) {
+          showStatus("warning", `未回答が ${missing.length} 問あります。サマリーに一覧を表示し、該当カードをハイライトしました。`);
+          highlightMissing(missing, { scrollToFirst: true });
+        } else {
+          showStatus("success", "全50問の回答を記録しました。");
+          cardRefs.forEach((card) => card.classList.remove("invalid"));
+        }
+        renderSummary(summaryInfo);
+        summaryCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+
+      function resetForm() {
+        store.clear();
+        questionList.querySelectorAll('input[type="radio"]').forEach((input) => {
+          input.checked = false;
+        });
+        cardRefs.forEach((card) => card.classList.remove("invalid"));
+        summaryCard.hidden = true;
+        hideStatus();
+        updateProgressMeta();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      renderQuestions();
+      updateProgressMeta();
+
+      reviewButton.addEventListener("click", reviewAnswers);
+      resetButton.addEventListener("click", resetForm);
+    </script>
+  </body>
+</html>
+
