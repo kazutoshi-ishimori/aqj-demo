@@ -173,6 +173,18 @@
             .map((id) => `Q${id}`)
             .join(", ")}`;
           summaryCard.appendChild(note);
+
+          const actions = document.createElement("div");
+          actions.className = "summary-actions";
+          const focusBtn = document.createElement("button");
+          focusBtn.className = "button secondary";
+          focusBtn.type = "button";
+          focusBtn.textContent = "未回答に移動";
+          focusBtn.addEventListener("click", () => {
+            highlightMissing(summaryInfo.missingQuestionIds, { scrollToFirst: true });
+          });
+          actions.appendChild(focusBtn);
+          summaryCard.appendChild(actions);
         }
 
         const table = document.createElement("table");
@@ -186,31 +198,6 @@
         });
         table.appendChild(tbody);
         summaryCard.appendChild(table);
-
-        const textarea = document.createElement("textarea");
-        textarea.className = "summary-text-block";
-        textarea.readOnly = true;
-        textarea.value = summaryInfo.plainText;
-        summaryCard.appendChild(textarea);
-
-        const copyBtn = document.createElement("button");
-        copyBtn.className = "button secondary";
-        copyBtn.type = "button";
-        copyBtn.textContent = "サマリーをコピー";
-        copyBtn.addEventListener("click", async () => {
-          textarea.select();
-          try {
-            if (navigator.clipboard?.writeText) {
-              await navigator.clipboard.writeText(textarea.value);
-            } else {
-              document.execCommand("copy");
-            }
-            showStatus("success", "サマリーをコピーしました。");
-          } catch (error) {
-            showStatus("error", "コピーに失敗しました。手動で選択してください。");
-          }
-        });
-        summaryCard.appendChild(copyBtn);
       }
 
       function reviewAnswers() {

@@ -64,6 +64,14 @@ h3 {
   margin-top: 1rem;
 }
 
+.question-card.step-card-odd {
+  background-color: #f8fafc;
+}
+
+.question-card.step-card-even {
+  background-color: #fef9ef;
+}
+
 .question-label {
   font-weight: 600;
   display: block;
@@ -377,17 +385,6 @@ h3 {
 .summary-table th {
   color: #475467;
   font-weight: 600;
-}
-
-.summary-text-block {
-  width: 100%;
-  min-height: 120px;
-  border: 1px dashed #cbd5f5;
-  border-radius: 0.85rem;
-  padding: 0.75rem;
-  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 0.85rem;
-  background-color: #f8fafc;
 }
 
 .modal-backdrop {

@@ -132,6 +132,7 @@
 
         const card = document.createElement("article");
         card.className = "question-card";
+        card.classList.add(question.id % 2 === 1 ? "step-card-odd" : "step-card-even");
         card.id = `question-card-${question.id}`;
 
         const fieldset = document.createElement("fieldset");
@@ -170,13 +171,41 @@
         updateProgressMeta();
       }
 
+      function focusQuestion(questionId) {
+        const clamped = Math.min(Math.max(questionId - 1, 0), total - 1);
+        currentIndex = clamped;
+        showQuestionView();
+        hideStatus();
+        renderCurrentQuestion();
+        questionContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+        const card = document.getElementById(`question-card-${questionId}`);
+        if (card) {
+          card.classList.add("invalid");
+        }
+      }
+
       function renderSummary() {
-        const summaryInfo = summarizeAnswers(store, { allowIncomplete: false });
+        const summaryInfo = summarizeAnswers(store, { allowIncomplete: true });
+
+        if (summaryInfo.missingQuestionIds.length) {
+          showStatus("warning", `未回答が ${summaryInfo.missingQuestionIds.length} 問あります。サマリーで一覧を確認してください。`);
+        } else {
+          showStatus("success", "全50問の回答を記録しました。");
+        }
 
         summaryCard.innerHTML = `
           <h2>回答サマリー</h2>
           <p>${summaryInfo.answeredCount}/${summaryInfo.total} の回答を記録しました。</p>
         `;
+
+        if (summaryInfo.missingQuestionIds.length) {
+          const note = document.createElement("p");
+          note.className = "range-label";
+          note.textContent = `未回答 ${summaryInfo.missingQuestionIds.length} 問: ${summaryInfo.missingQuestionIds
+            .map((id) => `Q${id}`)
+            .join(", ")}`;
+          summaryCard.appendChild(note);
+        }
 
         const table = document.createElement("table");
         table.className = "summary-table";
@@ -190,45 +219,30 @@
         table.appendChild(tbody);
         summaryCard.appendChild(table);
 
-        const textarea = document.createElement("textarea");
-        textarea.className = "summary-text-block";
-        textarea.readOnly = true;
-        textarea.value = summaryInfo.plainText;
-        summaryCard.appendChild(textarea);
-        // サマリーをコピーするボタン
-        const copyBtn = document.createElement("button");
-        copyBtn.className = "button secondary";
-        copyBtn.type = "button";
-        copyBtn.textContent = "サマリーをコピー";
-        copyBtn.addEventListener("click", async () => {
-          textarea.select();
-          try {
-            if (navigator.clipboard?.writeText) {
-              await navigator.clipboard.writeText(textarea.value);
-            } else {
-              document.execCommand("copy");
-            }
-            showStatus("success", "サマリーをコピーしました。");
-          } catch (error) {
-            showStatus("error", "コピーに失敗しました。手動で選択してください。");
-          }
-        });
-        summaryCard.appendChild(copyBtn);
+        const actions = document.createElement("div");
+        actions.className = "summary-actions";
 
-        // Q50に戻ってやり直すボタン
+        if (summaryInfo.missingQuestionIds.length) {
+          const focusBtn = document.createElement("button");
+          focusBtn.className = "button primary";
+          focusBtn.type = "button";
+          focusBtn.textContent = "未回答に戻る";
+          focusBtn.addEventListener("click", () => focusQuestion(summaryInfo.missingQuestionIds[0]));
+          actions.appendChild(focusBtn);
+        }
+
         const backBtn = document.createElement("button");
         backBtn.className = "button secondary";
         backBtn.type = "button";
-        backBtn.textContent = "前の質問へ";
-        backBtn.style.marginLeft = "0.5rem";
+        backBtn.textContent = "質問に戻る";
         backBtn.addEventListener("click", () => {
-          // サマリーを閉じて、最後の質問（Q50）が再表示されるようにする
           showQuestionView();
           hideStatus();
           renderCurrentQuestion();
           questionContainer.scrollIntoView({ behavior: "smooth", block: "start" });
         });
-        summaryCard.appendChild(backBtn);
+        actions.appendChild(backBtn);
+        summaryCard.appendChild(actions);
       }
 
       function handleAnswered() {

@@ -51,7 +51,6 @@
         </div>
         <div class="summary-card" data-summary-content></div>
         <div class="summary-actions">
-          <button class="button secondary" data-copy-summary>サマリーをコピー</button>
           <button class="button primary" data-close-summary>閉じる</button>
         </div>
       </div>
@@ -66,7 +65,7 @@
         getRangeLabel,
         formatQuestionId,
         createAnswerStore,
-        formatSummaryEntries
+        summarizeAnswers
       } from "./aqj.js";
 
       const instructionsContainer = document.querySelector("[data-instructions]");
@@ -86,7 +85,6 @@
       const modal = document.querySelector("[data-summary-modal]");
       const closeButtons = document.querySelectorAll("[data-close-summary]");
       const summaryContent = document.querySelector("[data-summary-content]");
-      const copyButton = document.querySelector("[data-copy-summary]");
 
       groups.forEach((group) => {
         const details = document.createElement("details");
@@ -151,12 +149,12 @@
       function hideStatus() {
         statusBanner.hidden = true;
         statusBanner.textContent = "";
-        statusBanner.classList.remove("error", "success");
+        statusBanner.classList.remove("error", "success", "warning");
       }
 
       function showStatus(type, message) {
         statusBanner.hidden = false;
-        statusBanner.classList.remove("error", "success");
+        statusBanner.classList.remove("error", "success", "warning");
         statusBanner.classList.add(type);
         statusBanner.textContent = message;
       }
@@ -195,18 +193,35 @@
         });
       }
 
-      function renderSummary() {
-        const entries = formatSummaryEntries(store.toSummaryEntries());
-        const answeredCount = store.getAnsweredCount();
+      function renderSummary(summaryInfo) {
+        summaryContent.innerHTML = `
+          <p><strong>${summaryInfo.answeredCount}/${summaryInfo.total}</strong> の回答を記録しました。</p>
+        `;
+
+        if (summaryInfo.missingQuestionIds.length) {
+          const note = document.createElement("p");
+          note.className = "range-label";
+          note.textContent = `未回答 ${summaryInfo.missingQuestionIds.length} 問: ${summaryInfo.missingQuestionIds
+            .map((id) => `Q${id}`)
+            .join(", ")}`;
+          summaryContent.appendChild(note);
+
+          const actions = document.createElement("div");
+          actions.className = "summary-actions";
+          const focusBtn = document.createElement("button");
+          focusBtn.className = "button secondary";
+          focusBtn.type = "button";
+          focusBtn.textContent = "未回答のセクションを開く";
+          focusBtn.addEventListener("click", () => highlightMissing(summaryInfo.missingQuestionIds));
+          actions.appendChild(focusBtn);
+          summaryContent.appendChild(actions);
+        }
+
         const table = document.createElement("table");
         table.className = "summary-table";
-
-        const thead = document.createElement("thead");
-        thead.innerHTML = "<tr><th>番号</th><th>回答</th><th>質問文</th></tr>";
-        table.appendChild(thead);
-
+        table.innerHTML = "<thead><tr><th>番号</th><th>回答</th><th>質問文</th></tr></thead>";
         const tbody = document.createElement("tbody");
-        entries.forEach((entry) => {
+        summaryInfo.entries.forEach((entry) => {
           const row = document.createElement("tr");
           row.innerHTML = `
             <td>Q${entry.id}</td>
@@ -216,51 +231,24 @@
           tbody.appendChild(row);
         });
         table.appendChild(tbody);
-
-        const plainText = document.createElement("textarea");
-        plainText.className = "summary-text-block";
-        plainText.readOnly = true;
-        plainText.value = store.toPlainText();
-
-        summaryContent.innerHTML = `
-          <p><strong>${answeredCount}/${AQJ_QUESTIONS.length}</strong> の回答を記録しました。</p>
-        `;
         summaryContent.appendChild(table);
-        summaryContent.appendChild(plainText);
       }
 
       function reviewAnswers() {
-        const missing = store.getUnansweredQuestionIds();
-        if (missing.length) {
-          showStatus("error", `未回答が ${missing.length} 問あります。最初の未回答: Q${missing[0]}`);
-          highlightMissing(missing);
-          closeModal();
-          return;
+        const summaryInfo = summarizeAnswers(store, { allowIncomplete: true });
+        if (summaryInfo.missingQuestionIds.length) {
+          showStatus("warning", `未回答が ${summaryInfo.missingQuestionIds.length} 問あります。サマリーとハイライトで確認してください。`);
+          highlightMissing(summaryInfo.missingQuestionIds);
+        } else {
+          showStatus("success", "全50問の回答を記録しました。サマリーをご確認ください。");
         }
-        renderSummary();
-        showStatus("success", "全50問の回答を記録しました。サマリーをご確認ください。");
+        renderSummary(summaryInfo);
         openModal();
       }
 
       reviewButton.addEventListener("click", reviewAnswers);
       resetButton.addEventListener("click", resetForm);
       closeButtons.forEach((btn) => btn.addEventListener("click", closeModal));
-      copyButton.addEventListener("click", async () => {
-        const textarea = summaryContent.querySelector("textarea");
-        if (!textarea) return;
-        textarea.select();
-        try {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(textarea.value);
-          } else {
-            document.execCommand("copy");
-          }
-          showStatus("success", "サマリーをクリップボードにコピーしました。");
-        } catch (error) {
-          showStatus("error", "コピーに失敗しました。手動で選択してください。");
-        }
-      });
-
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
           closeModal();

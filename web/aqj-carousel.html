@@ -60,7 +60,7 @@
         formatQuestionId,
         createInstructionsList,
         createAnswerStore,
-        formatSummaryEntries
+        summarizeAnswers
       } from "./aqj.js";
 
       const total = AQJ_QUESTIONS.length;
@@ -200,81 +200,79 @@
       function hideStatus() {
         statusBanner.hidden = true;
         statusBanner.textContent = "";
+        statusBanner.classList.remove("error", "success", "warning");
       }
 
       function showStatus(type, message) {
         statusBanner.hidden = false;
-        statusBanner.classList.remove("error", "success");
+        statusBanner.classList.remove("error", "success", "warning");
         statusBanner.classList.add(type);
         statusBanner.textContent = message;
       }
 
-      function goToFirstMissingQuestion() {
-        const missing = store.getUnansweredQuestionIds();
-        if (!missing.length) return null;
-        const firstId = missing[0];
+      function highlightMissingSlides(missingIds) {
+        carousel.querySelectorAll(".question-card").forEach((card) => card.classList.remove("invalid"));
+        if (!missingIds.length) return null;
+        const firstId = missingIds[0];
         goToSlide(firstId - 1);
-        const slide = carousel.querySelector(`[data-index="${firstId - 1}"]`);
-        if (slide) {
-          slide.classList.add("invalid");
-        }
-        return { firstId, count: missing.length };
+        missingIds.forEach((id) => {
+          const slide = carousel.querySelector(`[data-index="${id - 1}"]`);
+          if (slide) {
+            slide.classList.add("invalid");
+          }
+        });
+        return { firstId, count: missingIds.length };
       }
 
-      function renderSummary() {
-        const answered = store.getAnsweredCount();
+      function renderSummary(summaryInfo) {
         summaryCard.hidden = false;
         summaryCard.innerHTML = `
           <h2>回答サマリー</h2>
-          <p>${answered}/${total} の回答を記録しました。必要であれば Q をタップして修正してください。</p>
+          <p>${summaryInfo.answeredCount}/${summaryInfo.total} の回答を記録しました。必要であれば Q をタップして修正してください。</p>
         `;
+
+        if (summaryInfo.missingQuestionIds.length) {
+          const note = document.createElement("p");
+          note.className = "range-label";
+          note.textContent = `未回答 ${summaryInfo.missingQuestionIds.length} 問: ${summaryInfo.missingQuestionIds
+            .map((id) => `Q${id}`)
+            .join(", ")}`;
+          summaryCard.appendChild(note);
+
+          const actions = document.createElement("div");
+          actions.className = "summary-actions";
+          const focusBtn = document.createElement("button");
+          focusBtn.className = "button secondary";
+          focusBtn.type = "button";
+          focusBtn.textContent = "未回答スライドへ移動";
+          focusBtn.addEventListener("click", () => highlightMissingSlides(summaryInfo.missingQuestionIds));
+          actions.appendChild(focusBtn);
+          summaryCard.appendChild(actions);
+        }
+
         const table = document.createElement("table");
         table.className = "summary-table";
         table.innerHTML = "<thead><tr><th>番号</th><th>回答</th><th>質問文</th></tr></thead>";
         const tbody = document.createElement("tbody");
-        formatSummaryEntries(store.toSummaryEntries()).forEach((entry) => {
+        summaryInfo.entries.forEach((entry) => {
           const row = document.createElement("tr");
           row.innerHTML = `<td>Q${entry.id}</td><td>${entry.label}</td><td>${entry.text}</td>`;
           tbody.appendChild(row);
         });
         table.appendChild(tbody);
         summaryCard.appendChild(table);
-
-        const textarea = document.createElement("textarea");
-        textarea.className = "summary-text-block";
-        textarea.readOnly = true;
-        textarea.value = store.toPlainText();
-        summaryCard.appendChild(textarea);
-
-        const copyBtn = document.createElement("button");
-        copyBtn.className = "button secondary";
-        copyBtn.type = "button";
-        copyBtn.textContent = "サマリーをコピー";
-        copyBtn.addEventListener("click", async () => {
-          textarea.select();
-          try {
-            if (navigator.clipboard?.writeText) {
-              await navigator.clipboard.writeText(textarea.value);
-            } else {
-              document.execCommand("copy");
-            }
-            showStatus("success", "サマリーをコピーしました。");
-          } catch (error) {
-            showStatus("error", "コピーに失敗しました。手動で選択してください。");
-          }
-        });
-        summaryCard.appendChild(copyBtn);
       }
 
       reviewButton.addEventListener("click", () => {
-        const missingInfo = goToFirstMissingQuestion();
-        if (missingInfo) {
-          showStatus("error", `未回答が ${missingInfo.count} 問あります。Q${missingInfo.firstId} を確認してください。`);
-          summaryCard.hidden = true;
-          return;
+        const summaryInfo = summarizeAnswers(store, { allowIncomplete: true });
+        if (summaryInfo.missingQuestionIds.length) {
+          highlightMissingSlides(summaryInfo.missingQuestionIds);
+          showStatus("warning", `未回答が ${summaryInfo.missingQuestionIds.length} 問あります。Q${summaryInfo.missingQuestionIds[0]} から確認してください。`);
+        } else {
+          showStatus("success", "全50問の回答を記録しました。サマリーをご確認ください。");
         }
-        renderSummary();
-        showStatus("success", "全50問の回答を記録しました。サマリーをご確認ください。");
+        renderSummary(summaryInfo);
+        summaryCard.scrollIntoView({ behavior: "smooth", block: "start" });
       });
 
       resetButton.addEventListener("click", () => {
