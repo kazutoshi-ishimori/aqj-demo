@@ -31,6 +31,8 @@
           <div data-carousel-instructions></div>
         </section>
 
+        <div class="answer-dot-bar question-dot-bar" data-carousel-dots></div>
+
         <section class="carousel-shell">
           <div
             class="carousel-viewport"
@@ -45,7 +47,6 @@
             <button class="button secondary" data-carousel-review>回答を確認</button>
             <button class="button secondary" data-carousel-reset>リセット</button>
           </div>
-          <div class="answer-dot-bar" data-carousel-dots></div>
           <section class="summary-card" data-carousel-summary hidden></section>
         </section>
       </div>
@@ -79,6 +80,7 @@
       const instructionsContainer = document.querySelector("[data-carousel-instructions]");
       const statusBanner = document.querySelector("[data-carousel-status]");
       const summaryCard = document.querySelector("[data-carousel-summary]");
+      let autoAdvanceTimer = null;
 
       createInstructionsList(instructionsContainer);
 
@@ -115,6 +117,7 @@
             updateProgressMeta();
             hideStatus();
             summaryCard.hidden = true;
+            scheduleAutoAdvance(index);
           });
           choices.appendChild(optionNode);
         });
@@ -263,16 +266,39 @@
         summaryCard.appendChild(table);
       }
 
-      reviewButton.addEventListener("click", () => {
+      function showSummary({ scrollIntoView = true } = {}) {
         const summaryInfo = summarizeAnswers(store, { allowIncomplete: true });
         if (summaryInfo.missingQuestionIds.length) {
           highlightMissingSlides(summaryInfo.missingQuestionIds);
-          showStatus("warning", `未回答が ${summaryInfo.missingQuestionIds.length} 問あります。Q${summaryInfo.missingQuestionIds[0]} から確認してください。`);
+          showStatus(
+            "warning",
+            `未回答が ${summaryInfo.missingQuestionIds.length} 問あります。Q${summaryInfo.missingQuestionIds[0]} から確認してください。`
+          );
         } else {
           showStatus("success", "全50問の回答を記録しました。サマリーをご確認ください。");
         }
         renderSummary(summaryInfo);
-        summaryCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (scrollIntoView) {
+          summaryCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        return summaryInfo;
+      }
+
+      function scheduleAutoAdvance(currentSlideIndex) {
+        if (autoAdvanceTimer) {
+          window.clearTimeout(autoAdvanceTimer);
+        }
+        autoAdvanceTimer = window.setTimeout(() => {
+          if (currentSlideIndex >= total - 1) {
+            showSummary();
+          } else {
+            goToSlide(currentSlideIndex + 1);
+          }
+        }, 150);
+      }
+
+      reviewButton.addEventListener("click", () => {
+        showSummary();
       });
 
       resetButton.addEventListener("click", () => {
